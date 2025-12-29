@@ -51,3 +51,12 @@ bun.lock.db
 *.swo
 *~
 .DS_Store
+
+# test files (large PDFs/images)
+/test_files/
+
+# OCR temp files
+/tmp/
+
+# Tesseract language data (downloaded at runtime)
+*.traineddata

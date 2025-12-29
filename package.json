@@ -17,7 +17,9 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "shadcn": "^3.6.2",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^3.4.0",
+    "tesseract.js": "^7.0.0",
     "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
@@ -25,8 +27,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "canvas": "^3.2.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "pdfjs-dist": "^5.4.530",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
@@ -35,6 +39,7 @@
     "unrs-resolver"
   ],
   "trustedDependencies": [
+    "canvas",
     "sharp",
     "unrs-resolver"
   ]

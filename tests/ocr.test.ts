@@ -95,6 +95,38 @@ describe("OCR Tests", () => {
     }, 90000); // 90 second timeout for PDF OCR
   });
 
+  describe("Mistral OCR", () => {
+    test("should extract text from Feynman screenshot using Mistral", async () => {
+      // Skip if no API key
+      if (!process.env.MISTRAL_API_KEY) {
+        console.log("Skipping Mistral test - MISTRAL_API_KEY not set");
+        return;
+      }
+
+      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot.png");
+      const imageBuffer = readFileSync(imagePath);
+
+      const result = await processOCR("mistral", [
+        { buffer: imageBuffer, mimeType: "image/png", pageNumber: 1 },
+      ]);
+
+      expect(result.text).toBeDefined();
+      expect(result.text.length).toBeGreaterThan(100);
+      expect(result.pages).toHaveLength(1);
+      expect(result.provider).toBe("Mistral OCR");
+
+      // Check for some expected content from the index
+      const textLower = result.text.toLowerCase();
+      expect(textLower).toContain("quantum");
+
+      console.log("\n=== Mistral OCR Result ===");
+      console.log(`Processing time: ${result.processingTimeMs}ms`);
+      console.log(`Text length: ${result.text.length} characters`);
+      console.log("Sample text (first 500 chars):");
+      console.log(result.text.slice(0, 500));
+    }, 60000); // 60 second timeout for API call
+  });
+
   describe("Result Comparison", () => {
     test("PNG and PDF of same content should produce similar results", async () => {
       // Load PNG

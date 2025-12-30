@@ -35,9 +35,9 @@ const PROVIDERS: OCRProviderOption[] = [
   {
     id: "mistral",
     name: "Mistral OCR",
-    description: "Cloud OCR - High accuracy",
+    description: "Cloud OCR - High accuracy with Pixtral vision model",
     isLocal: false,
-    available: false, // Requires API key
+    available: true,
   },
   {
     id: "google",

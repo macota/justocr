@@ -46,11 +46,16 @@ This is a Next.js 16 project using the App Router with React 19 and TypeScript.
 - `types.ts` - OCRProvider and OCRResult interfaces
 - `index.ts` - Provider registry and processOCR function
 - `providers/tesseract.ts` - Local Tesseract.js provider
+- `providers/mistral.ts` - Mistral OCR API provider (uses `/v1/ocr` endpoint)
 
 **Adding a new OCR provider**:
 1. Create `lib/ocr/providers/<name>.ts` implementing `OCRProvider` interface
 2. Register in `lib/ocr/index.ts` providers object
 3. Add to `components/provider-selector.tsx` PROVIDERS array
+
+**Environment Variables** (in `.env.local`):
+- `MISTRAL_API_KEY` - Mistral OCR API key
+- `GOOGLE_CLOUD_VISION_API_KEY` - Google Cloud Vision API key (project: justocr-app)
 
 **PDF Support**:
 - Uses `pdftoppm` (poppler) for PDF to PNG conversion at 300 DPI
@@ -70,7 +75,7 @@ bunx --bun shadcn@latest add <component-name>
 
 ## Future Work
 
-- Cloud providers: Mistral OCR, Google Cloud Vision, AWS Textract
+- Cloud providers: Google Cloud Vision (API key ready), AWS Textract
 - Client-side Tesseract for privacy mode
 - User authentication and usage tracking
 - Stripe integration for paid tiers

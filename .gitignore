@@ -60,3 +60,6 @@ bun.lock.db
 
 # Tesseract language data (downloaded at runtime)
 *.traineddata
+
+# Planning docs (local only)
+/planning/

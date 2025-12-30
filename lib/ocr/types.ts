@@ -65,3 +65,56 @@ export interface BYOKProviderConfig {
     prefix?: string;
   };
 }
+
+/**
+ * Benchmark mode types for multi-provider comparison
+ */
+
+/**
+ * Result from a single provider in benchmark mode
+ */
+export interface BenchmarkProviderResult {
+  providerId: string;
+  providerName: string;
+  result: OCRResult | null;
+  error: string | null;
+  status: "pending" | "processing" | "completed" | "error";
+}
+
+/**
+ * Complete benchmark results for all providers
+ */
+export interface BenchmarkResults {
+  results: BenchmarkProviderResult[];
+  completedAt: number;
+}
+
+/**
+ * Statistics computed from benchmark results
+ */
+export interface BenchmarkStats {
+  fastest: {
+    providerId: string;
+    providerName: string;
+    timeMs: number;
+  } | null;
+  slowest: {
+    providerId: string;
+    providerName: string;
+    timeMs: number;
+  } | null;
+  mostCharacters: {
+    providerId: string;
+    providerName: string;
+    charCount: number;
+  } | null;
+  leastCharacters: {
+    providerId: string;
+    providerName: string;
+    charCount: number;
+  } | null;
+  averageTimeMs: number;
+  averageCharCount: number;
+  successCount: number;
+  errorCount: number;
+}

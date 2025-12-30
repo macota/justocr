@@ -1,10 +1,12 @@
 import type { OCRProvider, OCRResult } from "./types";
 import { tesseractProvider } from "./providers/tesseract";
 import { mistralProvider } from "./providers/mistral";
+import { googleVisionProvider } from "./providers/google";
 
 const providers: Record<string, OCRProvider> = {
   tesseract: tesseractProvider,
   mistral: mistralProvider,
+  google: googleVisionProvider,
 };
 
 export function getProvider(id: string): OCRProvider | undefined {

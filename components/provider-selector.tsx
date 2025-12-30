@@ -42,9 +42,9 @@ const PROVIDERS: OCRProviderOption[] = [
   {
     id: "google",
     name: "Google Cloud Vision",
-    description: "Cloud OCR - Enterprise grade",
+    description: "Cloud OCR - Enterprise grade document text detection",
     isLocal: false,
-    available: false, // Requires API key
+    available: true,
   },
 ];
 

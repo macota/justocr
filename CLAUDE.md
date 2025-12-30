@@ -12,7 +12,7 @@ JustOCR is a web app for OCR processing using multiple providers. Users can uplo
 bun dev          # Start development server at localhost:3000
 bun run build    # Production build (only run when asked)
 bun run lint     # Run ESLint
-bun test         # Run test suite
+bun run test     # Run test suite (loads .env.local)
 ```
 
 **Note**: Do not run `bun dev` - the dev server is already running in a separate terminal.
@@ -47,15 +47,18 @@ This is a Next.js 16 project using the App Router with React 19 and TypeScript.
 - `index.ts` - Provider registry and processOCR function
 - `providers/tesseract.ts` - Local Tesseract.js provider
 - `providers/mistral.ts` - Mistral OCR API provider (uses `/v1/ocr` endpoint)
+- `providers/google.ts` - Google Cloud Vision provider (uses `documentTextDetection`)
 
 **Adding a new OCR provider**:
 1. Create `lib/ocr/providers/<name>.ts` implementing `OCRProvider` interface
 2. Register in `lib/ocr/index.ts` providers object
 3. Add to `components/provider-selector.tsx` PROVIDERS array
 
-**Environment Variables** (in `.env.local`):
-- `MISTRAL_API_KEY` - Mistral OCR API key
-- `GOOGLE_CLOUD_VISION_API_KEY` - Google Cloud Vision API key (project: justocr-app)
+**Environment Variables & Auth**:
+- `MISTRAL_API_KEY` - Mistral OCR API key (in `.env.local`)
+- Google Cloud Vision uses Application Default Credentials (ADC):
+  - Run `gcloud auth application-default login` for local dev
+  - Or set `GOOGLE_APPLICATION_CREDENTIALS` pointing to service account JSON
 
 **PDF Support**:
 - Uses `pdftoppm` (poppler) for PDF to PNG conversion at 300 DPI
@@ -75,7 +78,7 @@ bunx --bun shadcn@latest add <component-name>
 
 ## Future Work
 
-- Cloud providers: Google Cloud Vision (API key ready), AWS Textract
+- Cloud providers: AWS Textract
 - Client-side Tesseract for privacy mode
 - User authentication and usage tracking
 - Stripe integration for paid tiers

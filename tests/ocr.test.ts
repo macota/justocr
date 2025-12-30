@@ -9,7 +9,7 @@ const TEST_FILES_DIR = join(__dirname, "../test_files");
 describe("OCR Tests", () => {
   describe("PNG Image OCR", () => {
     test("should extract text from Feynman screenshot", async () => {
-      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot.png");
+      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot_1_page_excerpt.png");
       const imageBuffer = readFileSync(imagePath);
 
       const result = await processOCR("tesseract", [
@@ -38,7 +38,7 @@ describe("OCR Tests", () => {
     test("should convert PDF to images", async () => {
       const pdfPath = join(
         TEST_FILES_DIR,
-        "FeynmanHughesLectures_Vol1 (dragged).pdf"
+        "FeynmanHughesLectures_Vol1_1_page_excerpt.pdf"
       );
       const pdfBuffer = readFileSync(pdfPath);
 
@@ -61,7 +61,7 @@ describe("OCR Tests", () => {
     test("should extract text from PDF via OCR", async () => {
       const pdfPath = join(
         TEST_FILES_DIR,
-        "FeynmanHughesLectures_Vol1 (dragged).pdf"
+        "FeynmanHughesLectures_Vol1_1_page_excerpt.pdf"
       );
       const pdfBuffer = readFileSync(pdfPath);
 
@@ -103,7 +103,7 @@ describe("OCR Tests", () => {
         return;
       }
 
-      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot.png");
+      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot_1_page_excerpt.png");
       const imageBuffer = readFileSync(imagePath);
 
       const result = await processOCR("mistral", [
@@ -127,16 +127,50 @@ describe("OCR Tests", () => {
     }, 60000); // 60 second timeout for API call
   });
 
+  describe("Google Cloud Vision OCR", () => {
+    test("should extract text from Feynman screenshot using Google Vision", async () => {
+      // Skip if no GCP credentials configured
+      // Set up with: gcloud auth application-default login
+      // Or set GOOGLE_APPLICATION_CREDENTIALS env var
+      if (process.env.SKIP_GOOGLE_VISION_TEST) {
+        console.log("Skipping Google Vision test - SKIP_GOOGLE_VISION_TEST is set");
+        return;
+      }
+
+      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot_1_page_excerpt.png");
+      const imageBuffer = readFileSync(imagePath);
+
+      const result = await processOCR("google", [
+        { buffer: imageBuffer, mimeType: "image/png", pageNumber: 1 },
+      ]);
+
+      expect(result.text).toBeDefined();
+      expect(result.text.length).toBeGreaterThan(100);
+      expect(result.pages).toHaveLength(1);
+      expect(result.provider).toBe("Google Cloud Vision");
+
+      // Check for some expected content from the index
+      const textLower = result.text.toLowerCase();
+      expect(textLower).toContain("quantum");
+
+      console.log("\n=== Google Cloud Vision OCR Result ===");
+      console.log(`Processing time: ${result.processingTimeMs}ms`);
+      console.log(`Text length: ${result.text.length} characters`);
+      console.log("Sample text (first 500 chars):");
+      console.log(result.text.slice(0, 500));
+    }, 60000); // 60 second timeout for API call
+  });
+
   describe("Result Comparison", () => {
     test("PNG and PDF of same content should produce similar results", async () => {
       // Load PNG
-      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot.png");
+      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot_1_page_excerpt.png");
       const imageBuffer = readFileSync(imagePath);
 
       // Load PDF
       const pdfPath = join(
         TEST_FILES_DIR,
-        "FeynmanHughesLectures_Vol1 (dragged).pdf"
+        "FeynmanHughesLectures_Vol1_1_page_excerpt.pdf"
       );
       const pdfBuffer = readFileSync(pdfPath);
       const pdfPages = await pdfToImages(pdfBuffer);

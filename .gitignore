@@ -63,3 +63,8 @@ bun.lock.db
 
 # Planning docs (local only)
 /planning/
+
+# AI assistant files (local only)
+GEMINI.md
+COPILOT.md
+CURSOR.md

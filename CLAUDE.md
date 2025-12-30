@@ -43,26 +43,40 @@ This is a Next.js 16 project using the App Router with React 19 and TypeScript.
 ## OCR System
 
 **Provider Abstraction** (`lib/ocr/`):
-- `types.ts` - OCRProvider and OCRResult interfaces
+- `types.ts` - OCRProvider, OCRResult, and benchmark interfaces
 - `index.ts` - Provider registry and processOCR function
-- `providers/tesseract.ts` - Local Tesseract.js provider
-- `providers/mistral.ts` - Mistral OCR API provider (uses `/v1/ocr` endpoint)
-- `providers/google.ts` - Google Cloud Vision provider (uses `documentTextDetection`)
+- `benchmark.ts` - Benchmark comparison utilities and export functions
+- `providers/tesseract.ts` - Server-side Tesseract.js provider
+- `providers/tesseract-browser.ts` - Client-side Tesseract for Privacy Mode
+- `providers/mistral.ts` - Mistral OCR API provider (server-side)
+- `providers/google.ts` - Google Cloud Vision provider (server-side)
+- `client/` - Browser-side BYOK providers (direct API calls, keys never touch server)
+  - `mistral.ts` - Direct Mistral API calls
+  - `google.ts` - Direct Google Vision API calls
+  - `index.ts` - BYOK provider registry
 
 **Adding a new OCR provider**:
 1. Create `lib/ocr/providers/<name>.ts` implementing `OCRProvider` interface
 2. Register in `lib/ocr/index.ts` providers object
 3. Add to `components/provider-selector.tsx` PROVIDERS array
+4. For BYOK support: add client in `lib/ocr/client/<name>.ts`
 
 **Environment Variables & Auth**:
-- `MISTRAL_API_KEY` - Mistral OCR API key (in `.env.local`)
+- `MISTRAL_API_KEY` - Mistral OCR API key (in `.env.local`, optional if using BYOK)
 - Google Cloud Vision uses Application Default Credentials (ADC):
   - Run `gcloud auth application-default login` for local dev
   - Or set `GOOGLE_APPLICATION_CREDENTIALS` pointing to service account JSON
+- **Production without keys**: Users can still use Tesseract (server/local) and BYOK for cloud providers
 
 **PDF Support**:
 - Uses `pdftoppm` (poppler) for PDF to PNG conversion at 300 DPI
 - Requires poppler installed on the system (`brew install poppler` on macOS)
+- Note: Client-side Tesseract (Privacy Mode) only supports images, not PDFs
+
+**Features**:
+- **Privacy Mode**: "Tesseract (Local)" processes entirely in browser - data never leaves device
+- **BYOK**: Users provide their own API keys for Mistral/Google, stored in localStorage
+- **Benchmarking**: Compare up to 4 providers side-by-side, export results as JSON/CSV
 
 ## External Dependencies
 
@@ -79,6 +93,6 @@ bunx --bun shadcn@latest add <component-name>
 ## Future Work
 
 - Cloud providers: AWS Textract
-- Client-side Tesseract for privacy mode
 - User authentication and usage tracking
 - Stripe integration for paid tiers
+- See `planning/roadmap.md` for full roadmap

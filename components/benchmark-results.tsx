@@ -136,15 +136,15 @@ function ProviderResultCard({
   // Pending or processing state
   if (status === "pending" || status === "processing") {
     return (
-      <Card className="h-full">
+      <Card className="w-full">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             {providerName}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 flex items-center justify-center py-12">
-          <div className="flex flex-col items-center gap-3 text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin" />
+        <CardContent className="flex items-center justify-center py-8">
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
             <span className="text-sm">
               {status === "pending" ? "Waiting..." : "Processing..."}
             </span>
@@ -157,7 +157,7 @@ function ProviderResultCard({
   // Error state
   if (status === "error" || error) {
     return (
-      <Card className="h-full border-destructive/50">
+      <Card className="w-full border-destructive/50">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             {providerName}
@@ -177,54 +177,58 @@ function ProviderResultCard({
   if (!result) return null;
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="w-full">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            {providerName}
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              {providerName}
+            </CardTitle>
             {isFastest && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded text-xs font-medium">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded text-xs font-medium">
                 <Trophy className="h-3 w-3" />
                 Fastest
               </span>
             )}
             {hasMostChars && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded text-xs font-medium">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded text-xs font-medium">
                 <FileText className="h-3 w-3" />
                 Most Text
               </span>
             )}
-          </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setExpanded(!expanded)}
-            className="h-7 w-7 p-0"
-          >
-            {expanded ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {(result.processingTimeMs / 1000).toFixed(2)}s
-          </span>
-          <span className="flex items-center gap-1">
-            <FileText className="h-3 w-3" />
-            {result.text.length.toLocaleString()} chars
-          </span>
-          {result.pages.length > 1 && (
-            <span>{result.pages.length} pages</span>
-          )}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {(result.processingTimeMs / 1000).toFixed(2)}s
+              </span>
+              <span className="flex items-center gap-1">
+                <FileText className="h-3 w-3" />
+                {result.text.length.toLocaleString()} chars
+              </span>
+              {result.pages.length > 1 && (
+                <span>{result.pages.length} pages</span>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setExpanded(!expanded)}
+              className="h-7 w-7 p-0"
+            >
+              {expanded ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       {expanded && (
-        <CardContent className="flex-1 flex flex-col pt-2">
-          <div className="flex gap-1 mb-2">
+        <CardContent className="pt-2">
+          <div className="flex gap-2 mb-3">
             <Button variant="outline" size="sm" onClick={handleCopy} className="h-7 text-xs">
               {copied ? (
                 <>
@@ -243,8 +247,8 @@ function ProviderResultCard({
               TXT
             </Button>
           </div>
-          <div className="bg-muted rounded-lg p-3 flex-1 overflow-y-auto max-h-64">
-            <pre className="whitespace-pre-wrap text-xs font-mono text-foreground">
+          <div className="bg-muted rounded-lg p-4 overflow-y-auto max-h-80">
+            <pre className="whitespace-pre-wrap text-sm font-mono text-foreground leading-relaxed">
               {result.text}
             </pre>
           </div>
@@ -306,8 +310,8 @@ export function BenchmarkResultsView({
         )}
       </div>
 
-      {/* Results grid */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
+      {/* Results stack */}
+      <div className="flex flex-col gap-4">
         {results.results.map((r) => (
           <ProviderResultCard
             key={r.providerId}

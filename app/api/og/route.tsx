@@ -6,8 +6,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
 
   const title = searchParams.get('title') ?? 'JustOCR'
-  const tagline = searchParams.get('tagline') ?? 'Just OCR, Your Choice of Engine'
-  const description = searchParams.get('description') ?? 'Extract text from images and PDFs with your choice of OCR engine.'
+  const tagline = searchParams.get('tagline') ?? 'Choose Your Model'
+  const description = searchParams.get('description') ?? 'Straightforward OCR with cloud models from Google, Mistral, and more; or stay private In-Browser On-Device with local models.'
 
   // Fetch the icon image
   const iconUrl = new URL('/icon.png', request.url).toString()

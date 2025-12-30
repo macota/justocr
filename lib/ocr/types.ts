@@ -52,3 +52,16 @@ export interface OCRProgressInfo {
 }
 
 export type OCRProgressCallback = (info: OCRProgressInfo) => void;
+
+/**
+ * BYOK (Bring Your Own Key) provider configuration
+ */
+export interface BYOKProviderConfig {
+  providerId: string;
+  providerName: string;
+  apiKeyHelpUrl: string;
+  keyFormat?: {
+    minLength: number;
+    prefix?: string;
+  };
+}

@@ -7,10 +7,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Cpu, Cloud, Shield } from "lucide-react";
+import { Cpu, Cloud, Shield, Key } from "lucide-react";
 import type { OCRProviderConfig } from "@/lib/ocr/types";
 
-export type OCRProviderOption = OCRProviderConfig;
+export type OCRProviderOption = OCRProviderConfig & {
+  supportsBYOK?: boolean;
+};
 
 const PROVIDERS: OCRProviderOption[] = [
   {
@@ -20,6 +22,7 @@ const PROVIDERS: OCRProviderOption[] = [
     isLocal: true,
     isClientSide: false,
     available: true,
+    supportsBYOK: false,
   },
   {
     id: "tesseract-local",
@@ -28,22 +31,25 @@ const PROVIDERS: OCRProviderOption[] = [
     isLocal: true,
     isClientSide: true,
     available: true,
+    supportsBYOK: false,
   },
   {
     id: "mistral",
     name: "Mistral OCR",
-    description: "Cloud OCR - High accuracy with Mistral OCR 3",
+    description: "Cloud OCR - High accuracy with Mistral OCR 3 (BYOK supported)",
     isLocal: false,
     isClientSide: false,
     available: true,
+    supportsBYOK: true,
   },
   {
     id: "google",
     name: "Google Cloud Vision",
-    description: "Cloud OCR - Enterprise grade document text detection",
+    description: "Cloud OCR - Enterprise grade document text detection (BYOK supported)",
     isLocal: false,
     isClientSide: false,
     available: true,
+    supportsBYOK: true,
   },
 ];
 
@@ -87,6 +93,12 @@ export function ProviderSelector({
                 <span>{provider.name}</span>
                 {provider.isClientSide && (
                   <span className="text-xs text-emerald-600 font-medium">Privacy</span>
+                )}
+                {provider.supportsBYOK && (
+                  <span className="inline-flex items-center gap-0.5 text-xs text-amber-600 font-medium">
+                    <Key className="h-3 w-3" />
+                    BYOK
+                  </span>
                 )}
                 {!provider.available && (
                   <span className="text-xs text-muted-foreground">(Coming soon)</span>

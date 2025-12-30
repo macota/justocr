@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { UploadZone } from "@/components/upload-zone";
 import { ProviderSelector, PROVIDERS } from "@/components/provider-selector";
 import { OCRResults, type OCRResult } from "@/components/ocr-results";
+import { ApiKeyInput, getStoredApiKey } from "@/components/api-key-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileSearch, Shield, AlertCircle } from "lucide-react";
@@ -12,6 +13,11 @@ import {
   isPdfFile,
   type ProgressInfo,
 } from "@/lib/ocr/providers/tesseract-browser";
+import {
+  processOCRWithKey,
+  isBYOKProvider,
+  getBYOKProviderName,
+} from "@/lib/ocr/client";
 
 export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -20,10 +26,30 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progressInfo, setProgressInfo] = useState<ProgressInfo | null>(null);
+  const [byokApiKey, setByokApiKey] = useState<string | null>(null);
 
   const selectedProvider = PROVIDERS.find((p) => p.id === provider);
   const isClientSide = selectedProvider?.isClientSide ?? false;
   const isPdf = selectedFile ? isPdfFile(selectedFile) : false;
+  const supportsBYOK = selectedProvider?.supportsBYOK ?? false;
+  const hasByokKey = byokApiKey !== null && byokApiKey.length > 0;
+
+  // Handle BYOK key changes
+  const handleByokKeyChange = useCallback((key: string | null) => {
+    setByokApiKey(key);
+  }, []);
+
+  // Check for stored BYOK key when provider changes
+  const handleProviderChange = useCallback((newProvider: string) => {
+    setProvider(newProvider);
+    // Check if the new provider has a stored key
+    if (isBYOKProvider(newProvider)) {
+      const storedKey = getStoredApiKey(newProvider);
+      setByokApiKey(storedKey);
+    } else {
+      setByokApiKey(null);
+    }
+  }, []);
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
@@ -95,16 +121,46 @@ export default function Home() {
     }
   };
 
+  // Handle BYOK processing (directly from browser to provider API)
+  const handleProcessBYOK = async () => {
+    if (!selectedFile || !byokApiKey) return;
+
+    setIsLoading(true);
+    setError(null);
+    setResult(null);
+    setProgressInfo(null);
+
+    try {
+      const ocrResult = await processOCRWithKey(
+        provider,
+        selectedFile,
+        byokApiKey,
+        handleProgressUpdate
+      );
+      setResult(ocrResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsLoading(false);
+      setProgressInfo(null);
+    }
+  };
+
   const handleProcess = async () => {
     if (isClientSide) {
       await handleProcessClientSide();
+    } else if (supportsBYOK && hasByokKey) {
+      // BYOK mode: process directly from browser with user's API key
+      await handleProcessBYOK();
     } else {
       await handleProcessServer();
     }
   };
 
   // Determine if the button should be disabled
-  const isButtonDisabled = !selectedFile || isLoading || (isClientSide && isPdf);
+  // For BYOK providers, require an API key
+  const needsByokKey = supportsBYOK && !hasByokKey;
+  const isButtonDisabled = !selectedFile || isLoading || (isClientSide && isPdf) || needsByokKey;
 
   // Get button text based on state
   const getButtonText = () => {
@@ -137,9 +193,19 @@ export default function Home() {
 
           <ProviderSelector
             value={provider}
-            onChange={setProvider}
+            onChange={handleProviderChange}
             disabled={isLoading}
           />
+
+          {/* BYOK API Key Input for cloud providers */}
+          {supportsBYOK && isBYOKProvider(provider) && (
+            <ApiKeyInput
+              providerId={provider}
+              providerName={getBYOKProviderName(provider)}
+              onKeyChange={handleByokKeyChange}
+              disabled={isLoading}
+            />
+          )}
 
           {/* Privacy Mode Banner */}
           {isClientSide && (
@@ -172,8 +238,8 @@ export default function Home() {
             </Card>
           )}
 
-          {/* Progress Indicator for Client-side Processing */}
-          {isLoading && isClientSide && progressInfo && (
+          {/* Progress Indicator for Client-side and BYOK Processing */}
+          {isLoading && (isClientSide || (supportsBYOK && hasByokKey)) && progressInfo && (
             <Card>
               <CardContent className="py-4">
                 <div className="space-y-2">
@@ -202,7 +268,7 @@ export default function Home() {
             {getButtonText()}
           </Button>
 
-          <OCRResults result={result} isLoading={isLoading && !isClientSide} error={error} />
+          <OCRResults result={result} isLoading={isLoading && !isClientSide && !(supportsBYOK && hasByokKey)} error={error} />
         </div>
       </div>
     </main>

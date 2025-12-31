@@ -2,7 +2,12 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { UploadZone } from "@/components/upload-zone";
-import { ProviderSelector, PROVIDERS } from "@/components/provider-selector";
+import {
+  ProviderSelector,
+  PROVIDERS,
+  type ServerCredentials,
+  type CredentialMode,
+} from "@/components/provider-selector";
 import { OCRResults, type OCRResult } from "@/components/ocr-results";
 import { BenchmarkResultsView } from "@/components/benchmark-results";
 import { ApiKeyInput, getStoredApiKey } from "@/components/api-key-input";
@@ -44,23 +49,31 @@ export default function Home() {
   // Abort controller for canceling in-flight requests
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Server credentials availability
+  const [serverCredentials, setServerCredentials] = useState<ServerCredentials | null>(null);
+  // Credential mode per provider: 'server' or 'byok'
+  const [credentialModes, setCredentialModes] = useState<Record<string, CredentialMode>>({});
+
   const selectedProvider = PROVIDERS.find((p) => p.id === provider);
   const isClientSide = selectedProvider?.isClientSide ?? false;
   const supportsBYOK = selectedProvider?.supportsBYOK ?? false;
   const hasByokKey = byokApiKey !== null && byokApiKey.length > 0;
 
   // Compute which BYOK providers are missing keys in benchmark mode
+  // Only considers providers that are NOT using server mode
   const providersMissingKeys = useMemo(() => {
     if (!benchmarkMode) return [];
 
     return selectedProviders.filter((providerId) => {
       const config = PROVIDERS.find((p) => p.id === providerId);
       if (!config?.supportsBYOK) return false;
+      // If using server mode, no BYOK key needed
+      if (credentialModes[providerId] === "server") return false;
       const storedKey = getStoredApiKey(providerId);
       return !storedKey;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [benchmarkMode, selectedProviders, benchmarkKeysVersion]);
+  }, [benchmarkMode, selectedProviders, benchmarkKeysVersion, credentialModes]);
 
   // Detect when all benchmark results are complete
   useEffect(() => {
@@ -74,6 +87,28 @@ export default function Home() {
       }
     }
   }, [benchmarkResults]);
+
+  // Fetch server credentials availability on mount
+  useEffect(() => {
+    async function fetchServerCredentials() {
+      try {
+        const response = await fetch("/api/ocr/credentials");
+        if (response.ok) {
+          const credentials: ServerCredentials = await response.json();
+          setServerCredentials(credentials);
+          // Default to server mode for providers with server credentials
+          const defaultModes: Record<string, CredentialMode> = {};
+          if (credentials.mistral) defaultModes.mistral = "server";
+          if (credentials.google) defaultModes.google = "server";
+          setCredentialModes(defaultModes);
+        }
+      } catch {
+        // Server credentials check failed - no server credentials available
+        setServerCredentials({ mistral: false, google: false });
+      }
+    }
+    fetchServerCredentials();
+  }, []);
 
   // Handle BYOK key changes
   const handleByokKeyChange = useCallback((key: string | null) => {
@@ -138,6 +173,14 @@ export default function Home() {
     // Just increment version to trigger re-computation of providersMissingKeys
     setBenchmarkKeysVersion((v) => v + 1);
   }, []);
+
+  // Handle credential mode change (server vs byok)
+  const handleCredentialModeChange = useCallback(
+    (providerId: string, mode: CredentialMode) => {
+      setCredentialModes((prev) => ({ ...prev, [providerId]: mode }));
+    },
+    []
+  );
 
   const handleProcessClientSide = async () => {
     if (!selectedFile) return;
@@ -223,6 +266,7 @@ export default function Home() {
   ): Promise<BenchmarkProviderResult> => {
     const providerConfig = PROVIDERS.find((p) => p.id === providerId);
     const providerName = providerConfig?.name || providerId;
+    const useServerMode = credentialModes[providerId] === "server";
 
     try {
       let ocrResult: OCRResult;
@@ -230,6 +274,22 @@ export default function Home() {
       if (providerConfig?.isClientSide) {
         // Client-side processing (tesseract-local)
         ocrResult = await processImageClientSide(file);
+      } else if (useServerMode) {
+        // Server mode: use server-side credentials (env vars or ADC)
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("provider", providerId);
+
+        const response = await fetch("/api/ocr", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "OCR processing failed");
+        }
+        ocrResult = data.result;
       } else if (providerConfig?.supportsBYOK) {
         // BYOK provider - check for stored key
         const storedKey = getStoredApiKey(providerId);
@@ -326,15 +386,25 @@ export default function Home() {
       return !config?.isClientSide;
     });
 
-    // Check if any server providers need BYOK but don't have keys
+    // BYOK providers: supportsBYOK AND using byok mode AND have a stored key
     const byokProviders = serverProviders.filter((id) => {
       const config = PROVIDERS.find((p) => p.id === id);
-      return config?.supportsBYOK;
+      if (!config?.supportsBYOK) return false;
+      // If using server mode, don't use BYOK
+      if (credentialModes[id] === "server") return false;
+      // Must have a stored key to use BYOK
+      const key = getStoredApiKey(id);
+      return !!key;
     });
 
-    const serverProvidersWithoutBYOK = serverProviders.filter((id) => {
+    // Server-processed providers: not using BYOK (either server mode, or no BYOK capability)
+    const serverProcessedProviders = serverProviders.filter((id) => {
       const config = PROVIDERS.find((p) => p.id === id);
+      // Non-BYOK providers always use server
       if (!config?.supportsBYOK) return true;
+      // BYOK providers using server mode
+      if (credentialModes[id] === "server") return true;
+      // BYOK providers without a key fall back to server
       const key = getStoredApiKey(id);
       return !key;
     });
@@ -386,10 +456,10 @@ export default function Home() {
     }
 
     // Process server providers via SSE stream
-    if (serverProvidersWithoutBYOK.length > 0) {
+    if (serverProcessedProviders.length > 0) {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      formData.append("providers", JSON.stringify(serverProvidersWithoutBYOK));
+      formData.append("providers", JSON.stringify(serverProcessedProviders));
 
       fetch("/api/ocr", {
         method: "POST",
@@ -433,7 +503,7 @@ export default function Home() {
         .catch((err) => {
           if (err.name === "AbortError") return;
           // Mark all server providers as errored
-          for (const providerId of serverProvidersWithoutBYOK) {
+          for (const providerId of serverProcessedProviders) {
             updateSingleResult({
               providerId,
               providerName: PROVIDERS.find((p) => p.id === providerId)?.name || providerId,
@@ -453,6 +523,9 @@ export default function Home() {
       await handleProcessBenchmark();
     } else if (isClientSide) {
       await handleProcessClientSide();
+    } else if (credentialModes[provider] === "server") {
+      // Server mode: use server-side credentials (env vars or ADC)
+      await handleProcessServer();
     } else if (supportsBYOK && hasByokKey) {
       // BYOK mode: process directly from browser with user's API key
       await handleProcessBYOK();
@@ -462,8 +535,9 @@ export default function Home() {
   };
 
   // Determine if the button should be disabled
-  // For BYOK providers, require an API key (only in single mode)
-  const needsByokKey = !benchmarkMode && supportsBYOK && !hasByokKey;
+  // For BYOK providers, require an API key (only in single mode and BYOK mode)
+  const isUsingServerMode = credentialModes[provider] === "server";
+  const needsByokKey = !benchmarkMode && supportsBYOK && !hasByokKey && !isUsingServerMode;
   const noProvidersSelected = benchmarkMode && selectedProviders.length === 0;
   const hasMissingBenchmarkKeys = benchmarkMode && providersMissingKeys.length > 0;
 
@@ -519,17 +593,23 @@ export default function Home() {
             onSelectedProvidersChange={handleSelectedProvidersChange}
             providersMissingKeys={providersMissingKeys}
             onBenchmarkKeyProvided={handleBenchmarkKeyProvided}
+            serverCredentials={serverCredentials ?? undefined}
+            credentialModes={credentialModes}
+            onCredentialModeChange={handleCredentialModeChange}
           />
 
-          {/* BYOK API Key Input for cloud providers (only in single provider mode) */}
-          {!benchmarkMode && supportsBYOK && isBYOKProvider(provider) && (
-            <ApiKeyInput
-              providerId={provider}
-              providerName={getBYOKProviderName(provider)}
-              onKeyChange={handleByokKeyChange}
-              disabled={isLoading}
-            />
-          )}
+          {/* BYOK API Key Input for cloud providers (only in single provider mode and BYOK mode) */}
+          {!benchmarkMode &&
+            supportsBYOK &&
+            isBYOKProvider(provider) &&
+            credentialModes[provider] !== "server" && (
+              <ApiKeyInput
+                providerId={provider}
+                providerName={getBYOKProviderName(provider)}
+                onKeyChange={handleByokKeyChange}
+                disabled={isLoading}
+              />
+            )}
 
           {/* Privacy Mode Banner (only in single provider mode) */}
           {!benchmarkMode && isClientSide && (

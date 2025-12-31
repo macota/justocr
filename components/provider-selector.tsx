@@ -10,9 +10,19 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Cpu, Cloud, Shield, Key, BarChart3, Check, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Cpu, Cloud, Shield, Key, BarChart3, Check, Eye, EyeOff, AlertCircle, Server } from "lucide-react";
 import type { OCRProviderConfig } from "@/lib/ocr/types";
 import { storeApiKey } from "@/components/api-key-input";
+
+// Server credentials availability (fetched from /api/ocr/credentials)
+export interface ServerCredentials {
+  mistral: boolean;
+  google: boolean;
+}
+
+// Credential mode for each provider: 'server' (use env/ADC) or 'byok' (user's key)
+export type CredentialMode = "server" | "byok";
 
 export type OCRProviderOption = OCRProviderConfig & {
   supportsBYOK?: boolean;
@@ -71,6 +81,10 @@ interface ProviderSelectorProps {
   // BYOK key tracking for benchmark mode
   providersMissingKeys?: string[];
   onBenchmarkKeyProvided?: (providerId: string, key: string) => void;
+  // Server credentials (when available, shows toggle)
+  serverCredentials?: ServerCredentials;
+  credentialModes?: Record<string, CredentialMode>;
+  onCredentialModeChange?: (providerId: string, mode: CredentialMode) => void;
 }
 
 // Compact inline key input for benchmark mode
@@ -194,6 +208,39 @@ function ProviderBadges({ provider }: { provider: OCRProviderOption }) {
   );
 }
 
+// Toggle between server credentials and BYOK
+function CredentialModeToggle({
+  mode,
+  onChange,
+  disabled,
+}: {
+  mode: CredentialMode;
+  onChange: (mode: CredentialMode) => void;
+  disabled?: boolean;
+}) {
+  const isServerMode = mode === "server";
+
+  return (
+    <div
+      className="flex items-center justify-between p-2 mt-1 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-md"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-2">
+        <Server className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        <span className="text-xs text-emerald-700 dark:text-emerald-300">
+          Use server credentials
+        </span>
+      </div>
+      <Switch
+        checked={isServerMode}
+        onCheckedChange={(checked) => onChange(checked ? "server" : "byok")}
+        disabled={disabled}
+        className="data-[state=checked]:bg-emerald-600"
+      />
+    </div>
+  );
+}
+
 export function ProviderSelector({
   value,
   onChange,
@@ -204,8 +251,22 @@ export function ProviderSelector({
   onSelectedProvidersChange,
   providersMissingKeys = [],
   onBenchmarkKeyProvided,
+  serverCredentials,
+  credentialModes = {},
+  onCredentialModeChange,
 }: ProviderSelectorProps) {
   const selectedProvider = PROVIDERS.find((p) => p.id === value);
+
+  // Check if a provider has server credentials available
+  const hasServerCredentials = (providerId: string): boolean => {
+    if (!serverCredentials) return false;
+    return serverCredentials[providerId as keyof ServerCredentials] ?? false;
+  };
+
+  // Get the current credential mode for a provider
+  const getCredentialMode = (providerId: string): CredentialMode => {
+    return credentialModes[providerId] ?? "byok";
+  };
 
   const handleProviderToggle = (providerId: string) => {
     if (!onSelectedProvidersChange) return;
@@ -279,6 +340,16 @@ export function ProviderSelector({
             {selectedProvider.description}
           </p>
         )}
+        {/* Show credential mode toggle for BYOK providers with server credentials */}
+        {selectedProvider?.supportsBYOK &&
+          hasServerCredentials(value) &&
+          onCredentialModeChange && (
+            <CredentialModeToggle
+              mode={getCredentialMode(value)}
+              onChange={(mode) => onCredentialModeChange(value, mode)}
+              disabled={disabled}
+            />
+          )}
       </div>
     );
   }
@@ -311,7 +382,13 @@ export function ProviderSelector({
           const isDisabled =
             disabled ||
             (!isSelected && selectedProviders.length >= MAX_BENCHMARK_PROVIDERS);
-          const isMissingKey = isSelected && providersMissingKeys.includes(provider.id);
+          const isUsingServer = getCredentialMode(provider.id) === "server";
+          const hasServer = hasServerCredentials(provider.id);
+          // Only show as missing key if using BYOK mode and key is missing
+          const isMissingKey =
+            isSelected &&
+            providersMissingKeys.includes(provider.id) &&
+            !isUsingServer;
 
           return (
             <div key={provider.id}>
@@ -342,6 +419,12 @@ export function ProviderSelector({
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-sm">{provider.name}</span>
                     <ProviderBadges provider={provider} />
+                    {isUsingServer && isSelected && (
+                      <span className="inline-flex items-center gap-0.5 text-xs text-emerald-600 font-medium">
+                        <Server className="h-3 w-3" />
+                        Server
+                      </span>
+                    )}
                     {isMissingKey && (
                       <span className="inline-flex items-center gap-0.5 text-xs text-amber-600 font-medium">
                         <AlertCircle className="h-3 w-3" />
@@ -354,6 +437,18 @@ export function ProviderSelector({
                   </p>
                 </div>
               </button>
+              {/* Credential mode toggle for BYOK providers with server credentials */}
+              {isSelected &&
+                provider.supportsBYOK &&
+                hasServer &&
+                onCredentialModeChange && (
+                  <CredentialModeToggle
+                    mode={getCredentialMode(provider.id)}
+                    onChange={(mode) => onCredentialModeChange(provider.id, mode)}
+                    disabled={disabled}
+                  />
+                )}
+              {/* BYOK key input (only when using BYOK mode and key is missing) */}
               {isMissingKey && onBenchmarkKeyProvided && (
                 <InlineKeyInput
                   providerId={provider.id}

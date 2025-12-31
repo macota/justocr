@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
       "./node_modules/is-url/**/*",
       "./node_modules/regenerator-runtime/**/*",
       "./node_modules/node-fetch/**/*",
+      "./node_modules/wasm-feature-detect/**/*",
     ],
   },
 };

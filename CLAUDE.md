@@ -47,7 +47,6 @@ This is a Next.js 16 project using the App Router with React 19 and TypeScript.
 - `types.ts` - OCRProvider, OCRResult, and benchmark interfaces
 - `index.ts` - Provider registry and processOCR function
 - `benchmark.ts` - Benchmark comparison utilities and export functions
-- `providers/tesseract.ts` - Server-side Tesseract.js provider
 - `providers/tesseract-browser.ts` - Client-side Tesseract for Privacy Mode
 - `providers/mistral.ts` - Mistral OCR API provider (server-side)
 - `providers/google.ts` - Google Cloud Vision provider (server-side)
@@ -67,7 +66,7 @@ This is a Next.js 16 project using the App Router with React 19 and TypeScript.
 - Google Cloud Vision uses Application Default Credentials (ADC):
   - Run `gcloud auth application-default login` for local dev
   - Or set `GOOGLE_APPLICATION_CREDENTIALS` pointing to service account JSON
-- **Production without keys**: Users can still use Tesseract (server/local) and BYOK for cloud providers
+- **Production without keys**: Users can still use Tesseract (Privacy Mode) and BYOK for cloud providers
 
 **PDF Support**:
 - Server-side: Uses `pdftoppm` (poppler) for PDF to PNG conversion at 300 DPI
@@ -76,13 +75,13 @@ This is a Next.js 16 project using the App Router with React 19 and TypeScript.
   - Privacy Mode now fully supports PDFs - data never leaves the browser
 
 **Features**:
-- **Privacy Mode**: "Tesseract (Local)" processes images and PDFs entirely in browser - data never leaves device
+- **Privacy Mode**: Tesseract processes images and PDFs entirely in browser - data never leaves device
 - **BYOK**: Users provide their own API keys for Mistral/Google, stored in localStorage
 - **Benchmarking**: Compare up to 4 providers side-by-side, export results as JSON/CSV
 
 ## External Dependencies
 
-- `tesseract.js` - Local OCR engine (configured with legacyCore/legacyLang for Node.js compatibility)
+- `tesseract.js` - Browser-based OCR engine for Privacy Mode
 - `pdfjs-dist` - Client-side PDF rendering (PDF.js)
 - `sharp` - Image metadata
 - `pdftoppm` - Server-side PDF rendering (system dependency via poppler, not npm)

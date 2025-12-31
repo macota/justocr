@@ -76,6 +76,7 @@ export async function pdfToImagesInBrowser(
       await page.render({
         canvasContext: context,
         viewport: viewport,
+        canvas: canvas,
       }).promise;
 
       // Convert canvas to blob (more memory efficient than data URL)

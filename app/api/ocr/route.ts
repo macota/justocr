@@ -140,15 +140,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, result });
     }
 
-    // Benchmark mode: process multiple providers in parallel
-    const results = await Promise.all(
-      providers.map((providerId) => processWithProvider(providerId, imageBuffers))
-    );
+    // Benchmark mode: stream results as each provider completes using SSE
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Process each provider and stream result as it completes
+        const promises = providers.map(async (providerId) => {
+          const result = await processWithProvider(providerId, imageBuffers);
+          const data = JSON.stringify({
+            ...result,
+            status: result.error ? "error" : "completed",
+          });
+          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+        });
 
-    return NextResponse.json({
-      success: true,
-      benchmark: true,
-      results,
+        await Promise.all(promises);
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     });
   } catch (error) {
     console.error("OCR processing error:", error);

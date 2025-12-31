@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { UploadZone } from "@/components/upload-zone";
 import { ProviderSelector, PROVIDERS } from "@/components/provider-selector";
 import { OCRResults, type OCRResult } from "@/components/ocr-results";
@@ -19,7 +19,11 @@ import {
   getBYOKProviderName,
 } from "@/lib/ocr/client";
 import type { BenchmarkResults, BenchmarkProviderResult } from "@/lib/ocr/types";
-import { createInitialBenchmarkResults } from "@/lib/ocr/benchmark";
+import {
+  createInitialBenchmarkResults,
+  updateBenchmarkResult,
+  isBenchmarkComplete,
+} from "@/lib/ocr/benchmark";
 
 export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -36,6 +40,9 @@ export default function Home() {
   const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResults | null>(null);
   // Track when BYOK keys are provided in benchmark mode (forces re-render to update missing keys)
   const [benchmarkKeysVersion, setBenchmarkKeysVersion] = useState(0);
+
+  // Abort controller for canceling in-flight requests
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const selectedProvider = PROVIDERS.find((p) => p.id === provider);
   const isClientSide = selectedProvider?.isClientSide ?? false;
@@ -54,6 +61,19 @@ export default function Home() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchmarkMode, selectedProviders, benchmarkKeysVersion]);
+
+  // Detect when all benchmark results are complete
+  useEffect(() => {
+    if (benchmarkResults && isBenchmarkComplete(benchmarkResults)) {
+      setIsLoading(false);
+      // Update completedAt timestamp if not already set
+      if (benchmarkResults.completedAt === 0) {
+        setBenchmarkResults((prev) =>
+          prev ? { ...prev, completedAt: Date.now() } : prev
+        );
+      }
+    }
+  }, [benchmarkResults]);
 
   // Handle BYOK key changes
   const handleByokKeyChange = useCallback((key: string | null) => {
@@ -81,11 +101,17 @@ export default function Home() {
   };
 
   const handleClear = () => {
+    // Abort any in-flight requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setSelectedFile(null);
     setResult(null);
     setBenchmarkResults(null);
     setError(null);
     setProgressInfo(null);
+    setIsLoading(false);
   };
 
   const handleProgressUpdate = (info: ProgressInfo) => {
@@ -313,103 +339,113 @@ export default function Home() {
       return !key;
     });
 
-    try {
-      // Process all providers in parallel
-      const allPromises: Promise<BenchmarkProviderResult>[] = [];
+    // Create abort controller for cancellation
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
-      // Add client-side processing promises
-      for (const providerId of clientSideProviders) {
-        allPromises.push(processBenchmarkProvider(providerId, selectedFile));
-      }
+    // Helper to update a single result (with abort check)
+    const updateSingleResult = (result: BenchmarkProviderResult) => {
+      if (abortController.signal.aborted) return;
+      setBenchmarkResults((prev) => {
+        if (!prev) return prev;
+        return updateBenchmarkResult(prev, result.providerId, result);
+      });
+    };
 
-      // For server providers without BYOK, use batch API if multiple
-      if (serverProvidersWithoutBYOK.length > 0) {
-        const formData = new FormData();
-        formData.append("file", selectedFile);
-        formData.append("providers", JSON.stringify(serverProvidersWithoutBYOK));
+    // Process client-side providers (stream individually)
+    for (const providerId of clientSideProviders) {
+      processBenchmarkProvider(providerId, selectedFile)
+        .then(updateSingleResult)
+        .catch((err) => {
+          updateSingleResult({
+            providerId,
+            providerName: PROVIDERS.find((p) => p.id === providerId)?.name || providerId,
+            result: null,
+            error: err instanceof Error ? err.message : "Processing failed",
+            status: "error",
+          });
+        });
+    }
 
-        const serverPromise = fetch("/api/ocr", {
-          method: "POST",
-          body: formData,
-        })
-          .then(async (response) => {
-            const data = await response.json();
-            if (!response.ok) {
-              throw new Error(data.error || "OCR processing failed");
-            }
-
-            // Return array of results from batch API
-            if (data.benchmark && data.results) {
-              return data.results.map((r: BenchmarkProviderResult) => ({
-                ...r,
-                status: r.error ? "error" : "completed",
-              }));
-            }
-
-            // Single result (shouldn't happen here but handle it)
-            return [
-              {
-                providerId: serverProvidersWithoutBYOK[0],
-                providerName: data.result.provider,
-                result: data.result,
-                error: null,
-                status: "completed" as const,
-              },
-            ];
-          })
+    // Process BYOK providers (stream individually)
+    for (const providerId of byokProviders) {
+      const key = getStoredApiKey(providerId);
+      if (key) {
+        processBenchmarkProvider(providerId, selectedFile)
+          .then(updateSingleResult)
           .catch((err) => {
-            // Return errors for all server providers
-            return serverProvidersWithoutBYOK.map((providerId) => ({
+            updateSingleResult({
               providerId,
               providerName: PROVIDERS.find((p) => p.id === providerId)?.name || providerId,
               result: null,
               error: err instanceof Error ? err.message : "Processing failed",
-              status: "error" as const,
-            }));
+              status: "error",
+            });
           });
-
-        allPromises.push(serverPromise as Promise<BenchmarkProviderResult>);
       }
-
-      // Add BYOK provider promises (process individually client-side)
-      for (const providerId of byokProviders) {
-        const key = getStoredApiKey(providerId);
-        if (key) {
-          allPromises.push(processBenchmarkProvider(providerId, selectedFile));
-        }
-      }
-
-      // Wait for all to complete
-      const allResults = await Promise.all(allPromises);
-
-      // Flatten and merge results
-      const flatResults: BenchmarkProviderResult[] = allResults.flat();
-
-      // Create final results object
-      const finalResults: BenchmarkResults = {
-        results: selectedProviders.map((providerId) => {
-          const result = flatResults.find((r) => r.providerId === providerId);
-          if (result) {
-            return result;
-          }
-          // Fallback for missing results
-          return {
-            providerId,
-            providerName: PROVIDERS.find((p) => p.id === providerId)?.name || providerId,
-            result: null,
-            error: "Provider not processed",
-            status: "error" as const,
-          };
-        }),
-        completedAt: Date.now(),
-      };
-
-      setBenchmarkResults(finalResults);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setIsLoading(false);
     }
+
+    // Process server providers via SSE stream
+    if (serverProvidersWithoutBYOK.length > 0) {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("providers", JSON.stringify(serverProvidersWithoutBYOK));
+
+      fetch("/api/ocr", {
+        method: "POST",
+        body: formData,
+        signal: abortController.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || "OCR processing failed");
+          }
+
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+
+          if (!reader) {
+            throw new Error("No response body");
+          }
+
+          let buffer = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+              if (line.startsWith("data: ") && !line.includes("[DONE]")) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  updateSingleResult(data);
+                } catch {
+                  // Ignore parse errors for malformed lines
+                }
+              }
+            }
+          }
+        })
+        .catch((err) => {
+          if (err.name === "AbortError") return;
+          // Mark all server providers as errored
+          for (const providerId of serverProvidersWithoutBYOK) {
+            updateSingleResult({
+              providerId,
+              providerName: PROVIDERS.find((p) => p.id === providerId)?.name || providerId,
+              result: null,
+              error: err instanceof Error ? err.message : "Processing failed",
+              status: "error",
+            });
+          }
+        });
+    }
+
+    // Note: isLoading is set to false by the useEffect when all providers complete
   };
 
   const handleProcess = async () => {

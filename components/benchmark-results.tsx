@@ -52,6 +52,24 @@ function StatsBadge({
   );
 }
 
+function ProgressSummary({ results }: { results: BenchmarkResults }) {
+  const total = results.results.length;
+  const completed = results.results.filter(
+    (r) => r.status === "completed" || r.status === "error"
+  ).length;
+
+  if (completed === total) return null;
+
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span>
+        {completed} of {total} complete
+      </span>
+    </div>
+  );
+}
+
 function StatsOverview({ stats }: { stats: BenchmarkStats }) {
   if (stats.successCount === 0) {
     return null;
@@ -286,6 +304,9 @@ export function BenchmarkResultsView({
 
   return (
     <div className="space-y-4">
+      {/* Progress indicator during processing */}
+      <ProgressSummary results={results} />
+
       {/* Header with stats and export */}
       <div className="flex items-start justify-between">
         <div>

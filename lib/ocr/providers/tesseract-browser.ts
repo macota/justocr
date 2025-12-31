@@ -1,7 +1,11 @@
 "use client";
 
-import { createWorker, PSM, OEM } from "tesseract.js";
+import { createWorker, PSM, OEM, Worker } from "tesseract.js";
 import type { OCRResult, OCRPage } from "../types";
+import {
+  pdfToImagesInBrowser,
+  isBrowserPDFSupported,
+} from "@/lib/pdf-browser";
 
 export type ProgressStatus =
   | "loading"
@@ -33,6 +37,159 @@ async function fileToDataUrl(file: File): Promise<string> {
 }
 
 /**
+ * Creates a Tesseract worker with progress logging
+ */
+async function createTesseractWorker(
+  onProgress?: (info: ProgressInfo) => void,
+  progressOffset = 0,
+  progressScale = 1
+): Promise<Worker> {
+  const worker = await createWorker("eng", OEM.LSTM_ONLY, {
+    logger: (m) => {
+      if (m.status === "loading tesseract core") {
+        onProgress?.({
+          status: "loading",
+          progress: progressOffset + Math.round(m.progress * 30 * progressScale),
+          message: "Loading Tesseract core...",
+        });
+      } else if (m.status === "initializing tesseract") {
+        onProgress?.({
+          status: "initializing",
+          progress: progressOffset + Math.round((30 + m.progress * 10) * progressScale),
+          message: "Initializing Tesseract...",
+        });
+      } else if (m.status === "loading language traineddata") {
+        onProgress?.({
+          status: "loading",
+          progress: progressOffset + Math.round((40 + m.progress * 20) * progressScale),
+          message: "Loading language data...",
+        });
+      } else if (m.status === "initializing api") {
+        onProgress?.({
+          status: "initializing",
+          progress: progressOffset + Math.round((60 + m.progress * 5) * progressScale),
+          message: "Initializing API...",
+        });
+      } else if (m.status === "recognizing text") {
+        onProgress?.({
+          status: "recognizing",
+          progress: progressOffset + Math.round((65 + m.progress * 35) * progressScale),
+          message: "Recognizing text...",
+        });
+      }
+    },
+  });
+
+  await worker.setParameters({
+    tessedit_pageseg_mode: PSM.AUTO,
+  });
+
+  return worker;
+}
+
+/**
+ * Process a PDF file using Tesseract.js in the browser.
+ * Converts each page to an image using PDF.js, then runs OCR.
+ */
+async function processPdfClientSide(
+  file: File,
+  options: TesseractBrowserOptions = {}
+): Promise<OCRResult> {
+  const { onProgress } = options;
+  const startTime = performance.now();
+
+  if (!isBrowserPDFSupported()) {
+    throw new Error("Browser does not support PDF conversion");
+  }
+
+  onProgress?.({
+    status: "loading",
+    progress: 0,
+    message: "Converting PDF pages...",
+  });
+
+  try {
+    // Convert PDF to images (takes ~30% of progress)
+    const pdfPages = await pdfToImagesInBrowser(file, (pdfProgress) => {
+      const progress = Math.round(
+        (pdfProgress.currentPage / pdfProgress.totalPages) * 30
+      );
+      onProgress?.({
+        status: "loading",
+        progress,
+        message: pdfProgress.message,
+      });
+    });
+
+    if (pdfPages.length === 0) {
+      throw new Error("No pages found in PDF");
+    }
+
+    onProgress?.({
+      status: "loading",
+      progress: 30,
+      message: "Loading Tesseract engine...",
+    });
+
+    // Create worker once for all pages
+    const worker = await createTesseractWorker(onProgress, 30, 0.3);
+
+    try {
+      const pages: OCRPage[] = [];
+      const allText: string[] = [];
+
+      // Process each page (remaining 40% of progress)
+      const ocrProgressPerPage = 40 / pdfPages.length;
+
+      for (let i = 0; i < pdfPages.length; i++) {
+        const pdfPage = pdfPages[i];
+        const pageProgressStart = 60 + i * ocrProgressPerPage;
+
+        onProgress?.({
+          status: "recognizing",
+          progress: Math.round(pageProgressStart),
+          message: `Processing page ${pdfPage.pageNumber} of ${pdfPages.length}...`,
+        });
+
+        // Recognize text from the image blob
+        const result = await worker.recognize(pdfPage.imageBlob);
+        const pageText = result.data.text;
+
+        pages.push({
+          pageNumber: pdfPage.pageNumber,
+          text: pageText,
+        } as OCRPage);
+        allText.push(pageText);
+      }
+
+      const endTime = performance.now();
+
+      onProgress?.({
+        status: "complete",
+        progress: 100,
+        message: "Complete!",
+      });
+
+      return {
+        text: allText.join("\n\n"),
+        pages,
+        processingTimeMs: Math.round(endTime - startTime),
+        provider: "tesseract-local",
+      };
+    } finally {
+      await worker.terminate();
+    }
+  } catch (error) {
+    onProgress?.({
+      status: "error",
+      progress: 0,
+      message: error instanceof Error ? error.message : "PDF processing failed",
+    });
+    throw error;
+  }
+}
+
+/**
  * Process an image file using Tesseract.js in the browser.
  * This function runs entirely client-side - no data is sent to any server.
  */
@@ -40,6 +197,11 @@ export async function processImageClientSide(
   file: File,
   options: TesseractBrowserOptions = {}
 ): Promise<OCRResult> {
+  // Handle PDFs separately
+  if (isPdfFile(file)) {
+    return processPdfClientSide(file, options);
+  }
+
   const { onProgress } = options;
   const startTime = performance.now();
 
@@ -55,7 +217,7 @@ export async function processImageClientSide(
 
   if (!validImageTypes.includes(file.type)) {
     throw new Error(
-      `Unsupported file type: ${file.type}. Client-side OCR only supports images (PNG, JPEG, GIF, WebP, BMP).`
+      `Unsupported file type: ${file.type}. Client-side OCR supports images (PNG, JPEG, GIF, WebP, BMP) and PDFs.`
     );
   }
 
@@ -66,50 +228,9 @@ export async function processImageClientSide(
   });
 
   try {
-    // Create worker with progress logging
-    const worker = await createWorker("eng", OEM.LSTM_ONLY, {
-      logger: (m) => {
-        // Map Tesseract.js progress events to our progress info
-        if (m.status === "loading tesseract core") {
-          onProgress?.({
-            status: "loading",
-            progress: Math.round(m.progress * 30),
-            message: "Loading Tesseract core...",
-          });
-        } else if (m.status === "initializing tesseract") {
-          onProgress?.({
-            status: "initializing",
-            progress: 30 + Math.round(m.progress * 10),
-            message: "Initializing Tesseract...",
-          });
-        } else if (m.status === "loading language traineddata") {
-          onProgress?.({
-            status: "loading",
-            progress: 40 + Math.round(m.progress * 20),
-            message: "Loading language data...",
-          });
-        } else if (m.status === "initializing api") {
-          onProgress?.({
-            status: "initializing",
-            progress: 60 + Math.round(m.progress * 5),
-            message: "Initializing API...",
-          });
-        } else if (m.status === "recognizing text") {
-          onProgress?.({
-            status: "recognizing",
-            progress: 65 + Math.round(m.progress * 35),
-            message: "Recognizing text...",
-          });
-        }
-      },
-    });
+    const worker = await createTesseractWorker(onProgress);
 
     try {
-      // Set page segmentation mode for automatic detection
-      await worker.setParameters({
-        tessedit_pageseg_mode: PSM.AUTO,
-      });
-
       // Convert file to data URL for browser processing
       const dataUrl = await fileToDataUrl(file);
 
@@ -163,11 +284,12 @@ export function isClientSideSupported(file: File): boolean {
     "image/webp",
     "image/bmp",
   ];
-  return validImageTypes.includes(file.type);
+  // Now supports PDFs via PDF.js conversion
+  return validImageTypes.includes(file.type) || file.type === "application/pdf";
 }
 
 /**
- * Check if the file is a PDF (not supported client-side)
+ * Check if the file is a PDF
  */
 export function isPdfFile(file: File): boolean {
   return file.type === "application/pdf";

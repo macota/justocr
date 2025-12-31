@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { UploadZone } from "@/components/upload-zone";
 import { ProviderSelector, PROVIDERS } from "@/components/provider-selector";
 import { OCRResults, type OCRResult } from "@/components/ocr-results";
@@ -8,10 +8,9 @@ import { BenchmarkResultsView } from "@/components/benchmark-results";
 import { ApiKeyInput, getStoredApiKey } from "@/components/api-key-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { FileSearch, Shield, AlertCircle, BarChart3 } from "lucide-react";
+import { FileSearch, Shield, BarChart3 } from "lucide-react";
 import {
   processImageClientSide,
-  isPdfFile,
   type ProgressInfo,
 } from "@/lib/ocr/providers/tesseract-browser";
 import {
@@ -20,14 +19,11 @@ import {
   getBYOKProviderName,
 } from "@/lib/ocr/client";
 import type { BenchmarkResults, BenchmarkProviderResult } from "@/lib/ocr/types";
-import {
-  createInitialBenchmarkResults,
-  updateBenchmarkResult,
-} from "@/lib/ocr/benchmark";
+import { createInitialBenchmarkResults } from "@/lib/ocr/benchmark";
 
 export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [provider, setProvider] = useState("tesseract");
+  const [provider, setProvider] = useState("tesseract-local");
   const [result, setResult] = useState<OCRResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +34,26 @@ export default function Home() {
   const [benchmarkMode, setBenchmarkMode] = useState(false);
   const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
   const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResults | null>(null);
+  // Track when BYOK keys are provided in benchmark mode (forces re-render to update missing keys)
+  const [benchmarkKeysVersion, setBenchmarkKeysVersion] = useState(0);
 
   const selectedProvider = PROVIDERS.find((p) => p.id === provider);
   const isClientSide = selectedProvider?.isClientSide ?? false;
-  const isPdf = selectedFile ? isPdfFile(selectedFile) : false;
   const supportsBYOK = selectedProvider?.supportsBYOK ?? false;
   const hasByokKey = byokApiKey !== null && byokApiKey.length > 0;
+
+  // Compute which BYOK providers are missing keys in benchmark mode
+  const providersMissingKeys = useMemo(() => {
+    if (!benchmarkMode) return [];
+
+    return selectedProviders.filter((providerId) => {
+      const config = PROVIDERS.find((p) => p.id === providerId);
+      if (!config?.supportsBYOK) return false;
+      const storedKey = getStoredApiKey(providerId);
+      return !storedKey;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [benchmarkMode, selectedProviders, benchmarkKeysVersion]);
 
   // Handle BYOK key changes
   const handleByokKeyChange = useCallback((key: string | null) => {
@@ -94,6 +104,13 @@ export default function Home() {
   // Handle selected providers change in benchmark mode
   const handleSelectedProvidersChange = useCallback((providers: string[]) => {
     setSelectedProviders(providers);
+  }, []);
+
+  // Handle when a BYOK key is provided in benchmark mode
+  const handleBenchmarkKeyProvided = useCallback((_providerId: string, _key: string) => {
+    // Key is already stored by the InlineKeyInput component
+    // Just increment version to trigger re-computation of providersMissingKeys
+    setBenchmarkKeysVersion((v) => v + 1);
   }, []);
 
   const handleProcessClientSide = async () => {
@@ -263,7 +280,7 @@ export default function Home() {
     );
 
     // Update all to processing
-    let currentResults: BenchmarkResults = {
+    const currentResults: BenchmarkResults = {
       ...initialResults,
       results: initialResults.results.map((r) => ({
         ...r,
@@ -412,23 +429,14 @@ export default function Home() {
   // For BYOK providers, require an API key (only in single mode)
   const needsByokKey = !benchmarkMode && supportsBYOK && !hasByokKey;
   const noProvidersSelected = benchmarkMode && selectedProviders.length === 0;
-  const clientSideAndPdf = !benchmarkMode && isClientSide && isPdf;
-
-  // In benchmark mode, check if client-side only providers are selected with PDF
-  const benchmarkHasClientSideWithPdf =
-    benchmarkMode &&
-    isPdf &&
-    selectedProviders.some((id) => {
-      const config = PROVIDERS.find((p) => p.id === id);
-      return config?.isClientSide;
-    });
+  const hasMissingBenchmarkKeys = benchmarkMode && providersMissingKeys.length > 0;
 
   const isButtonDisabled =
     !selectedFile ||
     isLoading ||
-    clientSideAndPdf ||
     needsByokKey ||
-    noProvidersSelected;
+    noProvidersSelected ||
+    hasMissingBenchmarkKeys;
 
   // Get button text based on state
   const getButtonText = () => {
@@ -439,6 +447,9 @@ export default function Home() {
       return "Processing...";
     }
     if (benchmarkMode) {
+      if (hasMissingBenchmarkKeys) {
+        return `API key${providersMissingKeys.length > 1 ? "s" : ""} required`;
+      }
       return `Compare ${selectedProviders.length} Provider${selectedProviders.length !== 1 ? "s" : ""}`;
     }
     return "Extract Text";
@@ -470,6 +481,8 @@ export default function Home() {
             onBenchmarkModeChange={handleBenchmarkModeChange}
             selectedProviders={selectedProviders}
             onSelectedProvidersChange={handleSelectedProvidersChange}
+            providersMissingKeys={providersMissingKeys}
+            onBenchmarkKeyProvided={handleBenchmarkKeyProvided}
           />
 
           {/* BYOK API Key Input for cloud providers (only in single provider mode) */}
@@ -497,37 +510,6 @@ export default function Home() {
             </Card>
           )}
 
-          {/* PDF Warning for Client-side Mode (single or benchmark) */}
-          {clientSideAndPdf && (
-            <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
-              <CardContent className="py-3">
-                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
-                  <AlertCircle className="h-4 w-4" />
-                  <span className="text-sm font-medium">PDF Not Supported in Privacy Mode</span>
-                </div>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Client-side OCR only supports image files (PNG, JPEG, GIF, WebP, BMP).
-                  Please select a different provider for PDF processing, or upload an image file.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Benchmark mode PDF warning */}
-          {benchmarkHasClientSideWithPdf && (
-            <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
-              <CardContent className="py-3">
-                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
-                  <AlertCircle className="h-4 w-4" />
-                  <span className="text-sm font-medium">Some Providers Cannot Process PDF</span>
-                </div>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Client-side providers (Tesseract Local) cannot process PDFs. They will be skipped in the benchmark.
-                  Consider uploading an image file to compare all providers.
-                </p>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Progress Indicator for Client-side and BYOK Processing */}
           {isLoading && !benchmarkMode && (isClientSide || (supportsBYOK && hasByokKey)) && progressInfo && (

@@ -16,17 +16,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JustOCR | Choose Your Model",
+  title: "JustOCR",
   description: "Straightforward OCR with cloud models from Google, Mistral, and more; or stay private In-Browser On-Device with local models.",
   metadataBase: new URL('https://justocr.vercel.app'),
   openGraph: {
-    title: "JustOCR | Choose Your Model",
+    title: "JustOCR",
     description: "Straightforward OCR with cloud models from Google, Mistral, and more; or stay private In-Browser On-Device with local models.",
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: "JustOCR | Choose Your Model",
+    title: "JustOCR",
     description: "Straightforward OCR with cloud models from Google, Mistral, and more; or stay private In-Browser On-Device with local models.",
   },
 };

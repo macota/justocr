@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import vision from "@google-cloud/vision";
+import { GoogleAuth } from "google-auth-library";
 
 export interface ServerCredentialsResponse {
   mistral: boolean;
@@ -22,11 +22,14 @@ export async function GET() {
   }
 
   // Check Google Cloud Vision ADC
+  // Creating an ImageAnnotatorClient succeeds even without credentials,
+  // so we need to actually verify that ADC is configured by getting credentials
   try {
-    // Attempt to create a client - this will fail if ADC is not configured
-    const client = new vision.ImageAnnotatorClient();
-    // If we get here, ADC is configured
-    await client.close();
+    const auth = new GoogleAuth({
+      scopes: ["https://www.googleapis.com/auth/cloud-vision"],
+    });
+    // This will throw if no credentials are available
+    await auth.getClient();
     credentials.google = true;
   } catch {
     // ADC not configured or invalid

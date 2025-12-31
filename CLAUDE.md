@@ -37,8 +37,9 @@ This is a Next.js 16 project using the App Router with React 19 and TypeScript.
 - `components/ui/` - shadcn/ui components
 - `lib/ocr/` - OCR provider abstraction layer
 - `lib/ocr/providers/` - Individual OCR provider implementations
-- `lib/pdf.ts` - PDF to image conversion (uses pdftoppm)
-- `tests/` - Test suite
+- `lib/pdf.ts` - Server-side PDF to image conversion (uses pdftoppm)
+- `lib/pdf-browser.ts` - Client-side PDF to image conversion (uses PDF.js)
+- `tests/` - Test suite (unit tests + integration tests for live API calls)
 
 ## OCR System
 
@@ -69,20 +70,22 @@ This is a Next.js 16 project using the App Router with React 19 and TypeScript.
 - **Production without keys**: Users can still use Tesseract (server/local) and BYOK for cloud providers
 
 **PDF Support**:
-- Uses `pdftoppm` (poppler) for PDF to PNG conversion at 300 DPI
-- Requires poppler installed on the system (`brew install poppler` on macOS)
-- Note: Client-side Tesseract (Privacy Mode) only supports images, not PDFs
+- Server-side: Uses `pdftoppm` (poppler) for PDF to PNG conversion at 300 DPI
+  - Requires poppler installed on the system (`brew install poppler` on macOS)
+- Client-side: Uses PDF.js (`lib/pdf-browser.ts`) for in-browser PDF to image conversion
+  - Privacy Mode now fully supports PDFs - data never leaves the browser
 
 **Features**:
-- **Privacy Mode**: "Tesseract (Local)" processes entirely in browser - data never leaves device
+- **Privacy Mode**: "Tesseract (Local)" processes images and PDFs entirely in browser - data never leaves device
 - **BYOK**: Users provide their own API keys for Mistral/Google, stored in localStorage
 - **Benchmarking**: Compare up to 4 providers side-by-side, export results as JSON/CSV
 
 ## External Dependencies
 
 - `tesseract.js` - Local OCR engine (configured with legacyCore/legacyLang for Node.js compatibility)
+- `pdfjs-dist` - Client-side PDF rendering (PDF.js)
 - `sharp` - Image metadata
-- `pdftoppm` - PDF rendering (system dependency, not npm)
+- `pdftoppm` - Server-side PDF rendering (system dependency via poppler, not npm)
 
 ## Adding shadcn Components
 

@@ -39,9 +39,9 @@ describe("Privacy Mode - Client-side Tesseract", () => {
       expect(isClientSideSupported(file)).toBe(true);
     });
 
-    test("should return false for PDF files", () => {
+    test("should return true for PDF files (supported via PDF.js)", () => {
       const file = createMockFile("test.pdf", "application/pdf");
-      expect(isClientSideSupported(file)).toBe(false);
+      expect(isClientSideSupported(file)).toBe(true);
     });
 
     test("should return false for TIFF files", () => {
@@ -67,6 +67,20 @@ describe("Privacy Mode - Client-side Tesseract", () => {
     test("should return false for empty MIME type", () => {
       const file = createMockFile("test", "");
       expect(isClientSideSupported(file)).toBe(false);
+    });
+
+    test("should handle uppercase MIME types (File API normalizes to lowercase)", () => {
+      // Note: The File API in browsers normalizes MIME types to lowercase,
+      // so "IMAGE/PNG" becomes "image/png". This test documents that behavior.
+      const file = createMockFile("test.png", "IMAGE/PNG");
+      // Browser File API normalizes the type, so this returns true
+      expect(isClientSideSupported(file)).toBe(true);
+    });
+
+    test("should handle mixed case MIME types (File API normalizes to lowercase)", () => {
+      const file = createMockFile("test.jpg", "Image/Jpeg");
+      // Browser File API normalizes the type, so this returns true
+      expect(isClientSideSupported(file)).toBe(true);
     });
   });
 
@@ -104,9 +118,9 @@ describe("Privacy Mode - Client-side Tesseract", () => {
   });
 
   describe("File type validation combinations", () => {
-    test("PDF files should not be supported for client-side and should be identified as PDF", () => {
+    test("PDF files should be supported for client-side and identified as PDF", () => {
       const file = createMockFile("document.pdf", "application/pdf");
-      expect(isClientSideSupported(file)).toBe(false);
+      expect(isClientSideSupported(file)).toBe(true);
       expect(isPdfFile(file)).toBe(true);
     });
 

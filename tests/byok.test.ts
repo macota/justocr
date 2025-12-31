@@ -4,6 +4,7 @@ import {
   getBYOKProviderName,
   getApiKeyHelpUrl,
   BYOK_PROVIDERS,
+  processOCRWithKey,
 } from "../lib/ocr/client/index";
 import {
   getStorageKey,
@@ -298,5 +299,45 @@ describe("BYOK Provider Type Guards", () => {
     expect(byokProviders).toContain("google");
     expect(byokProviders).not.toContain("tesseract");
     expect(byokProviders).not.toContain("unknown");
+  });
+});
+
+describe("processOCRWithKey Error Handling", () => {
+  // Helper to create a mock File
+  function createMockFile(name: string, type: string): File {
+    const blob = new Blob(["test content"], { type });
+    return new File([blob], name, { type });
+  }
+
+  test("should throw error for unsupported provider", async () => {
+    const file = createMockFile("test.png", "image/png");
+
+    await expect(
+      processOCRWithKey("tesseract", file, "some-api-key")
+    ).rejects.toThrow('Provider "tesseract" does not support BYOK');
+  });
+
+  test("should throw error for unknown provider", async () => {
+    const file = createMockFile("test.png", "image/png");
+
+    await expect(
+      processOCRWithKey("unknown-provider", file, "some-api-key")
+    ).rejects.toThrow('Provider "unknown-provider" does not support BYOK');
+  });
+
+  test("should throw error for empty API key", async () => {
+    const file = createMockFile("test.png", "image/png");
+
+    await expect(
+      processOCRWithKey("mistral", file, "")
+    ).rejects.toThrow("API key is required");
+  });
+
+  test("should throw error for whitespace-only API key", async () => {
+    const file = createMockFile("test.png", "image/png");
+
+    await expect(
+      processOCRWithKey("mistral", file, "   ")
+    ).rejects.toThrow("API key is required");
   });
 });

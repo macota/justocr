@@ -366,6 +366,56 @@ describe("Benchmark Utilities", () => {
 
       expect(lines.length).toBe(4); // Header + 3 rows
     });
+
+    test("should escape commas in provider names", () => {
+      const results = createMockBenchmarkResults([
+        {
+          providerId: "provider-with-comma",
+          providerName: "Provider, Inc.",
+          result: createMockOCRResult({ processingTimeMs: 1000 }),
+          status: "completed",
+        },
+      ]);
+
+      const csv = exportAsCSV(results);
+
+      // Provider name with comma should be quoted
+      expect(csv).toContain('"Provider, Inc."');
+    });
+
+    test("should escape newlines in error messages", () => {
+      const results = createMockBenchmarkResults([
+        {
+          providerId: "error-provider",
+          providerName: "Error Provider",
+          result: null,
+          error: "Error on\nline 2",
+          status: "error",
+        },
+      ]);
+
+      const csv = exportAsCSV(results);
+
+      // Newlines should be escaped within quotes
+      expect(csv).toContain('"Error on\nline 2"');
+    });
+
+    test("should escape quotes and commas together", () => {
+      const results = createMockBenchmarkResults([
+        {
+          providerId: "complex-error",
+          providerName: "Test Provider",
+          result: null,
+          error: 'Error: "invalid, input"',
+          status: "error",
+        },
+      ]);
+
+      const csv = exportAsCSV(results);
+
+      // Quotes should be escaped as double quotes
+      expect(csv).toContain('""invalid, input""');
+    });
   });
 
   describe("createInitialBenchmarkResults", () => {

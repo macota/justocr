@@ -1,10 +1,60 @@
 import { describe, test, expect } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { processOCR } from "../lib/ocr";
+import { processOCR, getProvider, getAvailableProviders } from "../lib/ocr";
 import { pdfToImages } from "../lib/pdf";
 
 const TEST_FILES_DIR = join(__dirname, "../test_files");
+
+describe("OCR Provider Registry", () => {
+  describe("getProvider", () => {
+    test("should return provider for valid provider ID", () => {
+      const provider = getProvider("tesseract");
+      expect(provider).toBeDefined();
+      expect(provider?.name).toBe("Tesseract");
+    });
+
+    test("should return undefined for unknown provider ID", () => {
+      const provider = getProvider("unknown-provider");
+      expect(provider).toBeUndefined();
+    });
+
+    test("should return undefined for empty string", () => {
+      const provider = getProvider("");
+      expect(provider).toBeUndefined();
+    });
+  });
+
+  describe("getAvailableProviders", () => {
+    test("should return array of provider IDs", () => {
+      const providers = getAvailableProviders();
+      expect(Array.isArray(providers)).toBe(true);
+      expect(providers).toContain("tesseract");
+    });
+  });
+
+  describe("processOCR error handling", () => {
+    test("should throw error for unknown provider", async () => {
+      const imageBuffer = Buffer.from("fake image data");
+
+      await expect(
+        processOCR("unknown-provider", [
+          { buffer: imageBuffer, mimeType: "image/png", pageNumber: 1 },
+        ])
+      ).rejects.toThrow("Unknown provider: unknown-provider");
+    });
+
+    test("should throw error for empty provider ID", async () => {
+      const imageBuffer = Buffer.from("fake image data");
+
+      await expect(
+        processOCR("", [
+          { buffer: imageBuffer, mimeType: "image/png", pageNumber: 1 },
+        ])
+      ).rejects.toThrow("Unknown provider: ");
+    });
+  });
+});
 
 describe("OCR Tests", () => {
   describe("PNG Image OCR", () => {
@@ -95,71 +145,8 @@ describe("OCR Tests", () => {
     }, 90000); // 90 second timeout for PDF OCR
   });
 
-  describe("Mistral OCR", () => {
-    test("should extract text from Feynman screenshot using Mistral", async () => {
-      // Skip if no API key
-      if (!process.env.MISTRAL_API_KEY) {
-        console.log("Skipping Mistral test - MISTRAL_API_KEY not set");
-        return;
-      }
-
-      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot_1_page_excerpt.png");
-      const imageBuffer = readFileSync(imagePath);
-
-      const result = await processOCR("mistral", [
-        { buffer: imageBuffer, mimeType: "image/png", pageNumber: 1 },
-      ]);
-
-      expect(result.text).toBeDefined();
-      expect(result.text.length).toBeGreaterThan(100);
-      expect(result.pages).toHaveLength(1);
-      expect(result.provider).toBe("Mistral OCR");
-
-      // Check for some expected content from the index
-      const textLower = result.text.toLowerCase();
-      expect(textLower).toContain("quantum");
-
-      console.log("\n=== Mistral OCR Result ===");
-      console.log(`Processing time: ${result.processingTimeMs}ms`);
-      console.log(`Text length: ${result.text.length} characters`);
-      console.log("Sample text (first 500 chars):");
-      console.log(result.text.slice(0, 500));
-    }, 60000); // 60 second timeout for API call
-  });
-
-  describe("Google Cloud Vision OCR", () => {
-    test("should extract text from Feynman screenshot using Google Vision", async () => {
-      // Skip if no GCP credentials configured
-      // Set up with: gcloud auth application-default login
-      // Or set GOOGLE_APPLICATION_CREDENTIALS env var
-      if (process.env.SKIP_GOOGLE_VISION_TEST) {
-        console.log("Skipping Google Vision test - SKIP_GOOGLE_VISION_TEST is set");
-        return;
-      }
-
-      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot_1_page_excerpt.png");
-      const imageBuffer = readFileSync(imagePath);
-
-      const result = await processOCR("google", [
-        { buffer: imageBuffer, mimeType: "image/png", pageNumber: 1 },
-      ]);
-
-      expect(result.text).toBeDefined();
-      expect(result.text.length).toBeGreaterThan(100);
-      expect(result.pages).toHaveLength(1);
-      expect(result.provider).toBe("Google Cloud Vision");
-
-      // Check for some expected content from the index
-      const textLower = result.text.toLowerCase();
-      expect(textLower).toContain("quantum");
-
-      console.log("\n=== Google Cloud Vision OCR Result ===");
-      console.log(`Processing time: ${result.processingTimeMs}ms`);
-      console.log(`Text length: ${result.text.length} characters`);
-      console.log("Sample text (first 500 chars):");
-      console.log(result.text.slice(0, 500));
-    }, 60000); // 60 second timeout for API call
-  });
+  // Note: Mistral and Google Cloud Vision live API tests have been moved to
+  // ocr.integration.test.ts to keep unit tests fast and CI-friendly.
 
   describe("Result Comparison", () => {
     test("PNG and PDF of same content should produce similar results", async () => {
@@ -189,23 +176,26 @@ describe("OCR Tests", () => {
         }))
       );
 
+      // Guard against silent failures - both outputs must be non-empty
+      expect(pngResult.text.length).toBeGreaterThan(0);
+      expect(pdfResult.text.length).toBeGreaterThan(0);
+
       // Both should find similar key terms
       const pngTextLower = pngResult.text.toLowerCase();
       const pdfTextLower = pdfResult.text.toLowerCase();
 
-      // Both should contain key terms from the Feynman index
+      // Both should contain at least one key term from the Feynman content
       const keyTerms = ["quantum", "radiation", "equation"];
-      for (const term of keyTerms) {
-        const pngHas = pngTextLower.includes(term);
-        const pdfHas = pdfTextLower.includes(term);
-        console.log(`Term "${term}": PNG=${pngHas}, PDF=${pdfHas}`);
-      }
+      const pngHasKeyTerm = keyTerms.some((term) => pngTextLower.includes(term));
+      const pdfHasKeyTerm = keyTerms.some((term) => pdfTextLower.includes(term));
 
+      expect(pngHasKeyTerm).toBe(true);
+      expect(pdfHasKeyTerm).toBe(true);
+
+      // Log for debugging (optional)
       console.log("\n=== Comparison Results ===");
       console.log(`PNG text length: ${pngResult.text.length}`);
       console.log(`PDF text length: ${pdfResult.text.length}`);
-      console.log(`PNG processing time: ${pngResult.processingTimeMs}ms`);
-      console.log(`PDF processing time: ${pdfResult.processingTimeMs}ms`);
     }, 120000); // 2 minute timeout for comparison test
   });
 });

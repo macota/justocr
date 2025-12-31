@@ -81,41 +81,4 @@ describe("OCR Integration Tests", () => {
     }, 60000); // 60 second timeout for API call
   });
 
-  describe("Provider Comparison", () => {
-    test("should compare Tesseract and Mistral results", async () => {
-      // Skip if no Mistral API key
-      if (!process.env.MISTRAL_API_KEY) {
-        console.log("Skipping comparison test - MISTRAL_API_KEY not set");
-        return;
-      }
-
-      const imagePath = join(TEST_FILES_DIR, "Feynman_screenshot_1_page_excerpt.png");
-      const imageBuffer = readFileSync(imagePath);
-
-      const [tesseractResult, mistralResult] = await Promise.all([
-        processOCR("tesseract", [
-          { buffer: imageBuffer, mimeType: "image/png", pageNumber: 1 },
-        ]),
-        processOCR("mistral", [
-          { buffer: imageBuffer, mimeType: "image/png", pageNumber: 1 },
-        ]),
-      ]);
-
-      // Both should produce non-empty results
-      expect(tesseractResult.text.length).toBeGreaterThan(0);
-      expect(mistralResult.text.length).toBeGreaterThan(0);
-
-      // Both should find key terms
-      const keyTerms = ["quantum", "radiation"];
-      const tesseractLower = tesseractResult.text.toLowerCase();
-      const mistralLower = mistralResult.text.toLowerCase();
-
-      expect(keyTerms.some((t) => tesseractLower.includes(t))).toBe(true);
-      expect(keyTerms.some((t) => mistralLower.includes(t))).toBe(true);
-
-      console.log("\n=== Provider Comparison ===");
-      console.log(`Tesseract: ${tesseractResult.text.length} chars, ${tesseractResult.processingTimeMs}ms`);
-      console.log(`Mistral: ${mistralResult.text.length} chars, ${mistralResult.processingTimeMs}ms`);
-    }, 120000);
-  });
 });

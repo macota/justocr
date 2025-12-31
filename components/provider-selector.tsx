@@ -31,19 +31,10 @@ export type OCRProviderOption = OCRProviderConfig & {
 const PROVIDERS: OCRProviderOption[] = [
   {
     id: "tesseract-local",
-    name: "Tesseract in Browser",
+    name: "Tesseract",
     description: "Data never leaves your device",
     isLocal: true,
     isClientSide: true,
-    available: true,
-    supportsBYOK: false,
-  },
-  {
-    id: "tesseract",
-    name: "Tesseract on Server",
-    description: "Simple, fast and free server OCR",
-    isLocal: true,
-    isClientSide: false,
     available: true,
     supportsBYOK: false,
   },

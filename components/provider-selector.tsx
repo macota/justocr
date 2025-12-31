@@ -8,7 +8,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Cpu, Cloud, Shield, Key, BarChart3, Check } from "lucide-react";
 import type { OCRProviderConfig } from "@/lib/ocr/types";
 
@@ -151,7 +150,7 @@ export function ProviderSelector({
               className="text-xs h-7 px-2"
             >
               <BarChart3 className="h-3.5 w-3.5 mr-1" />
-              Compare Providers
+              Run Parallel
             </Button>
           )}
         </div>
@@ -189,7 +188,7 @@ export function ProviderSelector({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium text-foreground">
-          Compare Providers
+          OCR Providers
         </label>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">
@@ -202,21 +201,10 @@ export function ProviderSelector({
             disabled={disabled}
             className="text-xs h-7 px-2"
           >
-            Single Provider
+            Run Single
           </Button>
         </div>
       </div>
-      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
-        <CardContent className="py-2 px-3">
-          <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 mb-2">
-            <BarChart3 className="h-4 w-4" />
-            <span className="text-sm font-medium">Benchmark Mode</span>
-          </div>
-          <p className="text-xs text-blue-600 dark:text-blue-400">
-            Select up to {MAX_BENCHMARK_PROVIDERS} providers to compare their OCR results side-by-side.
-          </p>
-        </CardContent>
-      </Card>
       <div className="space-y-2">
         {PROVIDERS.filter((p) => p.available).map((provider) => {
           const isSelected = selectedProviders.includes(provider.id);
